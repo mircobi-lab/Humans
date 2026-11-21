@@ -221,3 +221,8 @@ jobs:
             --notes-file pacchetto/NOTE-RELEASE.md \
             out/Humans-ACE-Step-mac-intel/Humans-ACE-Step-mac-intel.tar.gz \
             out/OpenUtau-Humans-mac-intel/OpenUtau-Humans-mac-intel.dmg
+          # Brano generato sul runner (CPU), per un primo ascolto
+          for f in out/prova-runner-ace-step/*.mp3; do
+            [ -f "$f" ] && cp "$f" "prova-runner-$(basename "$f")" && gh release upload prova-mac-intel "prova-runner-$(basename "$f")" --clobber
+          done
+          true
