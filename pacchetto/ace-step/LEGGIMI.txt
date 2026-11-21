@@ -1,23 +1,16 @@
-HUMANS - PROVA ACE-STEP SU MAC INTEL
+HUMANS - PROVA ACE-STEP SU MAC INTEL (macOS 12 Monterey o successivo)
 
-Cosa c'e' qui
-  bin/                        ace-lm, ace-synth, ace-server compilati su GitHub per Mac Intel
-  1-scarica-modelli.command   scarica i modelli (circa 5 GB) in models/
-  2-prova-velocita.command    genera 60 secondi di brano con GPU (Metal) e con CPU, misura i tempi
-  3-avvia-interfaccia.command interfaccia web nel browser per provare a mano
-  canzone-prova.json          il brano di prova (testo in italiano): puoi cambiarlo
+1. Fai doppio clic sul file .tar.gz scaricato: si crea la cartella Humans-ACE-Step-mac-intel.
+2. Nella cartella, clic DESTRO su AVVIA-QUI.command, poi "Apri", poi ancora "Apri".
+   (Il doppio clic normale la prima volta viene bloccato da macOS: serve il clic destro.)
+3. Si apre il Terminale e fa tutto da solo: controlla il Mac, scarica i modelli
+   (circa 2 GB sul Mac mini, 5 GB sul MacBook Pro), genera un brano di prova.
+   Ci vuole tempo: sul Mac mini anche 15-30 minuti. Non chiudere la finestra.
+4. Alla fine si apre la cartella "risultati":
+   - canzone-CPU0.mp3 e' il brano
+   - rapporto.txt e' da mandare a Claude, sia se funziona sia se da' errore
 
-Prima volta (una sola volta, nel Terminale)
-  macOS blocca i programmi scaricati da internet che non sono firmati da Apple.
-  Apri il Terminale, scrivi questa riga lasciando uno spazio alla fine,
-    xattr -dr com.apple.quarantine
-  trascina dentro la finestra la cartella Humans-ACE-Step-mac-intel e premi Invio.
+Per provare altri testi: 3-avvia-interfaccia.command (clic destro > Apri) apre
+l'interfaccia nel browser su http://localhost:8085
 
-Poi
-  1. doppio clic su 1-scarica-modelli.command e aspetta la fine
-  2. doppio clic su 2-prova-velocita.command
-  3. mandami il contenuto di risultati/riepilogo.txt e dimmi come suonano
-     risultati/canzone-MTL00.mp3 (GPU) e risultati/canzone-CPU0.mp3 (CPU)
-
-Licenze: acestep.cpp MIT (LICENSE-acestep.cpp.txt). Pesi del modello ACE-Step 1.5:
-ACE Studio e StepFun, licenza MIT.
+Licenze: acestep.cpp MIT (LICENSE-acestep.cpp.txt). Modello ACE-Step 1.5 di ACE Studio e StepFun, MIT.

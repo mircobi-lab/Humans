@@ -1,11 +1,11 @@
 {
     "caption": "Italian choir pop ballad, warm mixed choir vocals, soft piano, slow tempo, reverb hall",
     "lyrics": "[verse]\nSotto il cielo di Cuneo\nla neve scende piano\nogni finestra accesa\nracconta un'altra storia\n\n[chorus]\nCantiamo insieme stanotte\nle voci diventano luce\ncantiamo insieme stanotte\nnessuno resta da solo",
-    "duration": 60,
+    "duration": __DUR__,
     "vocal_language": "it",
     "seed": 42,
-    "lm_model": "acestep-5Hz-lm-1.7B-Q8_0.gguf",
-    "synth_model": "acestep-v15-turbo-Q8_0.gguf",
+    "lm_model": "__LM__",
+    "synth_model": "__DIT__",
     "inference_steps": 8,
     "output_format": "mp3"
 }

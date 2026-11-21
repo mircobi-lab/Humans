@@ -88,56 +88,28 @@ jobs:
           cd dist
           tar -czf ../Humans-ACE-Step-mac-intel.tar.gz Humans-ACE-Step-mac-intel
 
-      - name: Scarica modelli piccoli per la prova
+      - name: Versione minima macOS dei programmi (deve essere 12.0)
         run: |
-          mkdir -p ci-models ci-out
-          for f in vae-BF16.gguf Qwen3-Embedding-0.6B-Q8_0.gguf \
-                   acestep-5Hz-lm-0.6B-Q8_0.gguf acestep-v15-turbo-Q4_K_M.gguf; do
-            curl -fsSL --retry 3 -o "ci-models/$f" "$HF_BASE/$f" || { echo "::error title=Download modello::$f non scaricato"; exit 1; }
+          for b in dist/Humans-ACE-Step-mac-intel/bin/*; do
+            v=$(otool -l "$b" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+            echo "$(basename "$b"): minos $v"
+            [ "$v" = "12.0" ] || { echo "::error::$b richiede macOS $v"; exit 1; }
           done
-          ls -lh ci-models | tee ci-out/modelli.txt
+          echo "::notice title=Compatibilita'::programmi compilati per macOS 12 Monterey e successivi"
 
-      - name: Prova sul runner (CPU)
-        id: prova_cpu
+      - name: Prova lo script dell'utente (AVVIA-QUI.command) sul runner
         continue-on-error: true
         shell: bash
         run: |
-          BIN="$GITHUB_WORKSPACE/dist/Humans-ACE-Step-mac-intel/bin"
-          M="$GITHUB_WORKSPACE/ci-models"
-          O="$GITHUB_WORKSPACE/ci-out"
-          cp ci/canzone-ci.json "$O/"
-          cd "$O"
-          report() { # $1 = file di log: ultime righe come annotazione leggibile
-            t=$(tail -n 25 "$1" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
-            echo "::error title=Log $1::$t"
-          }
-          s=$(date +%s)
-          "$BIN/ace-lm" --models "$M" --request canzone-ci.json --device CPU > lm.log 2>&1 || { report lm.log; exit 1; }
-          m=$(date +%s)
-          "$BIN/ace-synth" --models "$M" --request canzone-ci0.json --device CPU > synth.log 2>&1 || { report synth.log; exit 1; }
-          e=$(date +%s)
-          ls -l
-          r="LM $((m-s)) s, sintesi CPU $((e-m)) s | $(grep -E 'DiT-Generate\] Total' synth.log | head -1) | $(grep -E 'VAE-Decode' synth.log | head -1)"
-          echo "::notice title=Tempi runner CPU (30 s di brano)::$r"
-          echo "### ACE-Step sul runner Intel: $r" >> "$GITHUB_STEP_SUMMARY"
-          tail -n 8 lm.log > lm-coda.txt; grep -iE 'lyrics|lang|bpm|dur' lm.log | head -5 >> lm-coda.txt
-          t=$(sed 's/%/%25/g' lm-coda.txt | awk '{printf "%s%%0A", $0}'); echo "::notice title=LM ok::$t"
-
-      - name: Prova sul runner (Metal, facoltativa)
-        continue-on-error: true
-        shell: bash
-        run: |
-          cd "$GITHUB_WORKSPACE/ci-out"
-          [ -f canzone-ci0.json ] || exit 0
-          cp canzone-ci0.json canzone-metal.json
-          s=$(date +%s)
-          if "$GITHUB_WORKSPACE/dist/Humans-ACE-Step-mac-intel/bin/ace-synth" --models "$GITHUB_WORKSPACE/ci-models" \
-               --request canzone-metal.json --device MTL0 > synth-metal.log 2>&1; then
-            echo "::notice title=Metal runner::ok in $(( $(date +%s)-s )) s"
-          else
-            t=$(tail -n 15 synth-metal.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
-            echo "::warning title=Metal runner non disponibile::$t"
-          fi
+          rm -rf /tmp/utente && mkdir -p /tmp/utente
+          tar -xzf Humans-ACE-Step-mac-intel.tar.gz -C /tmp/utente
+          # simula il download dal browser: quarantena sui file
+          xattr -w com.apple.quarantine "0081;00000000;Safari;" /tmp/utente/Humans-ACE-Step-mac-intel/bin/ace-lm || true
+          "/tmp/utente/Humans-ACE-Step-mac-intel/AVVIA-QUI.command" < /dev/null || true
+          mkdir -p ci-out
+          cp /tmp/utente/Humans-ACE-Step-mac-intel/risultati/{rapporto.txt,*.mp3,*.log} ci-out/ 2>/dev/null || true
+          t=$(sed 's/%/%25/g' ci-out/rapporto.txt | awk '{printf "%s%%0A", $0}')
+          if ls ci-out/*.mp3 >/dev/null 2>&1; then echo "::notice title=Rapporto runner::$t"; else echo "::error title=Rapporto runner::$t"; exit 1; fi
 
       - uses: actions/upload-artifact@v4
         with:
