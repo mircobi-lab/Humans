@@ -62,10 +62,17 @@ BASE="https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/main"
 for f in vae-BF16.gguf Qwen3-Embedding-0.6B-Q8_0.gguf "$LM" "$DIT"; do
   if [ -s "models/$f" ]; then log "[ok] $f"; continue; fi
   echo "[scarico] $f"
-  if curl -fL --retry 3 -C - -o "models/$f.part" "$BASE/$f"; then
+  ok=0; rc=0
+  for tentativo in 1 2 3 4 5; do
+    curl -fL --retry 3 --retry-all-errors --retry-delay 5 -C - -o "models/$f.part" "$BASE/$f"; rc=$?
+    [ $rc = 0 ] && { ok=1; break; }
+    echo "tentativo $tentativo non riuscito (codice $rc), riprovo tra 10 secondi..."; sleep 10
+  done
+  if [ $ok = 1 ]; then
     mv "models/$f.part" "models/$f"; log "[scaricato] $f"
   else
-    log "PROBLEMA: download di $f non riuscito (connessione?). Rilancia lo script per riprendere."; fine 1
+    log "PROBLEMA: download di $f non riuscito dopo 5 tentativi. Rilancia lo script: riprende da dove si era fermato."
+    log "Codice curl: $rc (6 = nome sito non trovato, 7 = connessione rifiutata, 22 = errore del sito, 28 = tempo scaduto, 56 = connessione interrotta)"; fine 1
   fi
 done
 
