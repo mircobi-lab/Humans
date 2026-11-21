@@ -1,0 +1,205 @@
+# Humans - prova di fattibilita' voci AI in locale su Mac Intel (x86_64)
+# Compila su GitHub i due motori candidati e pubblica i pacchetti da scaricare:
+#   1. ACE-Step 1.5 (acestep.cpp, C++/GGML): canzone completa da testo, tipo Suno
+#   2. OpenUtau + DiffSinger: voce cantata da MIDI e testo, tipo ACE Studio
+name: Mac Intel - build e prova
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  ACESTEP_REPO: ServeurpersoCom/acestep.cpp
+  ACESTEP_SHA: 973517be024ff8b6bbd50e0adc9e308ab2ed71b3
+  # Ultimo commit di OpenUtau che compilava per Mac Intel: il successivo
+  # (e1200ffd, 2 settembre 2026) ha tolto osx-x64, e ONNX Runtime >= 1.24
+  # non distribuisce piu' librerie x86_64 per macOS.
+  OPENUTAU_REPO: stakira/OpenUtau
+  OPENUTAU_SHA: d8ffda83a7b3c26ea8975c5928fcb4d1b5a84fb5
+  HF_BASE: https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/main
+
+jobs:
+  ace-step:
+    name: ACE-Step (acestep.cpp) - macOS x86_64
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scarica acestep.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ACESTEP_REPO }}
+          ref: ${{ env.ACESTEP_SHA }}
+          path: acestep.cpp
+          submodules: recursive
+
+      - name: Info macchina
+        run: |
+          uname -m; sw_vers
+          sysctl -n machdep.cpu.brand_string
+          sysctl -n machdep.cpu.features machdep.cpu.leaf7_features | tr ' ' '\n' | grep -iE 'avx|fma|f16c' | sort -u | tr '\n' ' '; echo
+          system_profiler SPDisplaysDataType | grep -E 'Chipset|Metal' || true
+
+      - name: Compila (CPU AVX2 + Accelerate + Metal, statico)
+        working-directory: acestep.cpp
+        run: |
+          # GGML_NATIVE=OFF: niente istruzioni AVX-512 del runner, il tuo i9 (2019) ha AVX2.
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON \
+            -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DGGML_BLAS=ON
+          cmake --build build --config Release -j "$(sysctl -n hw.ncpu)" \
+            --target ace-lm ace-synth ace-server
+
+      - name: Controlla i binari
+        working-directory: acestep.cpp/build
+        run: |
+          for b in ace-lm ace-synth ace-server; do
+            f=$(find . -maxdepth 3 -type f -name "$b" -perm -u+x | head -1)
+            echo "== $b -> $f"; file "$f"; otool -L "$f"
+            # Solo librerie di sistema, niente dipendenze da Homebrew
+            if otool -L "$f" | tail -n +2 | grep -vE '^\s*(/usr/lib/|/System/Library/)'; then
+              echo "::error::$b dipende da librerie non di sistema"; exit 1
+            fi
+          done
+
+      - name: Prepara pacchetto
+        run: |
+          P=dist/Humans-ACE-Step-mac-intel
+          mkdir -p "$P/bin" "$P/models" "$P/risultati"
+          for b in ace-lm ace-synth ace-server; do
+            cp "$(find acestep.cpp/build -maxdepth 3 -type f -name "$b" -perm -u+x | head -1)" "$P/bin/"
+          done
+          codesign --force -s - "$P"/bin/*
+          cp pacchetto/ace-step/* "$P/"
+          chmod +x "$P"/*.command "$P"/bin/*
+          cp acestep.cpp/LICENSE "$P/LICENSE-acestep.cpp.txt"
+
+      - name: Prova sul runner (modelli piccoli, CPU)
+        run: |
+          P=dist/Humans-ACE-Step-mac-intel
+          mkdir -p ci-models
+          for f in vae-BF16.gguf Qwen3-Embedding-0.6B-Q8_0.gguf \
+                   acestep-5Hz-lm-0.6B-Q8_0.gguf acestep-v15-turbo-Q4_K_M.gguf; do
+            curl -fL --retry 3 -o "ci-models/$f" "$HF_BASE/$f"
+          done
+          ls -lh ci-models
+          cp ci/canzone-ci.json /tmp/canzone-ci.json
+          cd /tmp
+          s=$(date +%s)
+          "$GITHUB_WORKSPACE/$P/bin/ace-lm" --models "$GITHUB_WORKSPACE/ci-models" --request canzone-ci.json --device CPU 2>&1 | tee lm.log
+          m=$(date +%s)
+          "$GITHUB_WORKSPACE/$P/bin/ace-synth" --models "$GITHUB_WORKSPACE/ci-models" --request canzone-ci0.json --device CPU 2>&1 | tee synth.log
+          e=$(date +%s)
+          {
+            echo "### ACE-Step sul runner Intel (CPU, 30 s di brano)"
+            echo "- LM (testo e struttura): $((m-s)) s"
+            echo "- Sintesi audio (DiT + VAE): $((e-m)) s"
+            grep -E 'DiT-Generate\] Total|VAE-Decode' synth.log | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p "$GITHUB_WORKSPACE/ci-out"
+          cp canzone-ci0.json lm.log synth.log canzone-ci0*.mp3 "$GITHUB_WORKSPACE/ci-out/"
+
+      - name: Prova Metal sul runner (facoltativa)
+        continue-on-error: true
+        run: |
+          cd /tmp
+          "$GITHUB_WORKSPACE/dist/Humans-ACE-Step-mac-intel/bin/ace-synth" \
+            --models "$GITHUB_WORKSPACE/ci-models" --request canzone-ci0.json --device MTL0 2>&1 \
+            | tee "$GITHUB_WORKSPACE/ci-out/synth-metal.log"
+
+      - name: Comprimi
+        run: |
+          cd dist
+          tar -czf ../Humans-ACE-Step-mac-intel.tar.gz Humans-ACE-Step-mac-intel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Humans-ACE-Step-mac-intel
+          path: Humans-ACE-Step-mac-intel.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prova-runner-ace-step
+          path: ci-out/
+
+  openutau:
+    name: OpenUtau + DiffSinger - macOS x86_64
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+    steps:
+      - name: Scarica OpenUtau
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.OPENUTAU_REPO }}
+          ref: ${{ env.OPENUTAU_SHA }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+            10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Restore
+        run: dotnet restore OpenUtau -r osx-x64
+
+      - name: Compila app (osx-x64)
+        run: dotnet msbuild OpenUtau -t:BundleApp -p:Configuration=Release -p:RuntimeIdentifier=osx-x64 -p:UseAppHost=true -p:SelfContained=true -p:OutputPath=../bin/osx-x64/
+
+      - name: Controlla librerie x86_64
+        run: |
+          app=bin/osx-x64/publish/OpenUtau.app
+          ls "$app/Contents/MacOS" | head -50
+          ort=$(find "$app" -name 'libonnxruntime*.dylib' | head -1)
+          wl=$(find "$app" -name 'libworldline.dylib' | head -1)
+          echo "ONNX Runtime: $ort"; lipo -info "$ort"
+          echo "worldline: $wl"; lipo -info "$wl"
+          lipo -info "$ort" | grep -q x86_64 || { echo "::error::ONNX Runtime senza x86_64"; exit 1; }
+          lipo -info "$app/Contents/MacOS/OpenUtau" | grep -q x86_64 || { echo "::error::eseguibile non x86_64"; exit 1; }
+
+      - name: Crea DMG
+        run: |
+          npm install -g create-dmg
+          cp OpenUtau/Assets/OpenUtau.icns bin/osx-x64/publish/OpenUtau.app/Contents/Resources/
+          codesign --force --deep -s - bin/osx-x64/publish/OpenUtau.app
+          create-dmg bin/osx-x64/publish/OpenUtau.app || true
+          mv *.dmg OpenUtau-Humans-mac-intel.dmg
+          codesign -fvs - OpenUtau-Humans-mac-intel.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenUtau-Humans-mac-intel
+          path: OpenUtau-Humans-mac-intel.dmg
+
+  pubblica:
+    name: Pubblica i file da scaricare
+    needs: [ace-step, openutau]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Release "prova-mac-intel"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find out -type f
+          gh release delete prova-mac-intel --yes --cleanup-tag || true
+          gh release create prova-mac-intel --prerelease \
+            --title "Prova Mac Intel - $(date +%Y-%m-%d)" \
+            --notes-file pacchetto/NOTE-RELEASE.md \
+            out/Humans-ACE-Step-mac-intel/Humans-ACE-Step-mac-intel.tar.gz \
+            out/OpenUtau-Humans-mac-intel/OpenUtau-Humans-mac-intel.dmg

@@ -1,0 +1,23 @@
+HUMANS - PROVA ACE-STEP SU MAC INTEL
+
+Cosa c'e' qui
+  bin/                        ace-lm, ace-synth, ace-server compilati su GitHub per Mac Intel
+  1-scarica-modelli.command   scarica i modelli (circa 5 GB) in models/
+  2-prova-velocita.command    genera 60 secondi di brano con GPU (Metal) e con CPU, misura i tempi
+  3-avvia-interfaccia.command interfaccia web nel browser per provare a mano
+  canzone-prova.json          il brano di prova (testo in italiano): puoi cambiarlo
+
+Prima volta (una sola volta, nel Terminale)
+  macOS blocca i programmi scaricati da internet che non sono firmati da Apple.
+  Apri il Terminale, scrivi questa riga lasciando uno spazio alla fine,
+    xattr -dr com.apple.quarantine
+  trascina dentro la finestra la cartella Humans-ACE-Step-mac-intel e premi Invio.
+
+Poi
+  1. doppio clic su 1-scarica-modelli.command e aspetta la fine
+  2. doppio clic su 2-prova-velocita.command
+  3. mandami il contenuto di risultati/riepilogo.txt e dimmi come suonano
+     risultati/canzone-MTL00.mp3 (GPU) e risultati/canzone-CPU0.mp3 (CPU)
+
+Licenze: acestep.cpp MIT (LICENSE-acestep.cpp.txt). Pesi del modello ACE-Step 1.5:
+ACE Studio e StepFun, licenza MIT.
