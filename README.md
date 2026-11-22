@@ -20,3 +20,7 @@ Il riepilogo dei tempi misurati sul runner compare nella pagina del run, sezione
 - OpenUtau ha tolto il supporto ai Mac Intel il 2 settembre 2026 (commit `e1200ffd`), e ONNX Runtime dalla 1.24 non pubblica più librerie x86_64 per macOS. Qui si compila il commit precedente, `d8ffda8`, con ONNX Runtime 1.23.2.
 - acestep.cpp è compilato con `GGML_NATIVE=OFF` e AVX2, così gira anche sul processore del 2019, che non ha AVX-512.
 - I runner `macos-15-intel` sono gli ultimi Intel offerti da GitHub, supportati fino ad agosto 2027.
+
+## Icona
+
+L'icona `icons/humans-1024.png` è generata da `scripts/make_icon.py` (`python3 scripts/make_icon.py icons/humans-1024.png "HUMANS"`), in stile hardware MBStudio91.
